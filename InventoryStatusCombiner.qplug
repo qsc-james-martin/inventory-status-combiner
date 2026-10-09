@@ -1,0 +1,110 @@
+-- Combines every design inventory item's status once per second.
+-- Matches Q-SYS Status Combiner priority: highest numeric status code wins.
+-- Lists all non-OK items; this plugin is not managed inventory itself.
+
+PluginInfo = {
+    Name = "Utility~Inventory Status Combiner",
+    Version = "1.0.2",
+    BuildVersion = "1.0.2",
+    Id = "caff323a-b905-41ab-bd22-9ad19f705bea",
+    Author = "James Martin",
+    Description = "Combine all design inventory statuses without input wiring.",
+    IsManaged = false,
+    ShowDebug = true
+}
+
+local STATUS_NAMES = {
+    [0] = "OK", [1] = "Compromised", [2] = "Fault",
+    [3] = "Not Present / Unknown", [4] = "Missing", [5] = "Initializing"
+}
+
+function GetColor(props)
+    return { 191, 226, 249 }
+end
+
+function GetPrettyName(props)
+    return "Inventory Status Combiner  v" .. PluginInfo.Version
+end
+
+function GetProperties()
+    return {
+        { Name = "Debug Print", Type = "enum", Choices = { "No", "Yes" }, Value = "No" }
+    }
+end
+
+function GetPins(props) return {} end
+function GetComponents(props) return {} end
+function GetWiring(props) return {} end
+
+function GetControls(props)
+    return {
+        { Name = "Status", ControlType = "Indicator", IndicatorType = "Status",
+            Count = 1, PinStyle = "Output", UserPin = true }
+    }
+end
+
+function GetControlLayout(props)
+    return {
+        Status = { Style = "Status", Position = { 8, 8 }, Size = { 640, 160 }, FontSize = 11 }
+    }, {}
+end
+
+if Controls then
+    local debug = Properties["Debug Print"].Value == "Yes"
+    local lastCode, lastMessage
+
+    local function status(code, message)
+        if code ~= lastCode or message ~= lastMessage then
+            if code ~= 0 or debug then print("Inventory Status Combiner: " .. message) end
+            lastCode, lastMessage = code, message
+        end
+        Controls.Status.Value = code
+        Controls.Status.String = message
+    end
+
+    local function update()
+        local ok, inventory = pcall(Design.GetInventory)
+        if not ok or type(inventory) ~= "table" then
+            status(2, "Cannot read design inventory: " .. tostring(inventory))
+            return
+        end
+
+        local count, worst, issues = 0, 0, {}
+        for _, item in pairs(inventory) do
+            count = count + 1
+            local name = type(item) == "table" and item.Name
+            if type(name) ~= "string" or name == "" then
+                worst = math.max(worst, 2)
+                issues[#issues + 1] = "Unnamed inventory item: status unavailable"
+            else
+                local source = item.Status
+                if type(source) ~= "table" or type(source.Code) ~= "number"
+                    or source.Code ~= source.Code or source.Code < 0 or source.Code > 5
+                    or source.Code % 1 ~= 0 or type(source.Message) ~= "string" then
+                    worst = math.max(worst, 2)
+                    issues[#issues + 1] = name .. ": status unavailable"
+                else
+                    worst = math.max(worst, source.Code)
+                    if source.Code ~= 0 then
+                        issues[#issues + 1] = name .. ": "
+                            .. (source.Message ~= "" and source.Message or STATUS_NAMES[source.Code])
+                    end
+                end
+            end
+        end
+
+        if count == 0 then
+            status(3, "No inventory items in this design.")
+        elseif worst == 0 then
+            status(0, "OK - All " .. count .. " inventory items.")
+        else
+            table.sort(issues)
+            status(worst, STATUS_NAMES[worst] .. " - " .. table.concat(issues, "; "))
+        end
+    end
+
+    InventoryStatusCombinerPollTimer = Timer.New()
+    InventoryStatusCombinerPollTimer.EventHandler = update
+    update()
+    InventoryStatusCombinerPollTimer:Start(1)
+end
