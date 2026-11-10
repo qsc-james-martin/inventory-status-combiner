@@ -25,5 +25,6 @@ managed like the native Status Combiner:
 - **Label** gives the input a name in the combined status message; blank labels
   default to `Input N`.
 
-The inventory and wired inputs are checked once per second. Turn on **Debug
-Print** in the properties to log diagnostic messages.
+The inventory and wired inputs are checked once per second. Status changes,
+including healthy states and faults, always print to the Q-SYS log. Unchanged
+status is not repeatedly logged; there is no Debug Print property.

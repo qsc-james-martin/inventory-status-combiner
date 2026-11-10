@@ -7,16 +7,15 @@
 
 PluginInfo = {
     Name = "Utility~Inventory Status Combiner",
-    Version = "1.2.0",
-    BuildVersion = "1.2.0",
+    Version = "1.2.2",
+    BuildVersion = "1.2.2",
     Id = "caff323a-b905-41ab-bd22-9ad19f705bea",
     Author = "James Martin",
     Description = "Combine all design inventory statuses without input wiring.",
-    IsManaged = false,
-    ShowDebug = true
+    IsManaged = false
 }
 
-local STATUS_NAMES = {
+STATUS_NAMES = {
     [0] = "OK", [1] = "Compromised", [2] = "Fault",
     [3] = "Not Present / Unknown", [4] = "Missing", [5] = "Initializing"
 }
@@ -31,12 +30,11 @@ end
 
 function GetProperties()
     return {
-        { Name = "Additional Inputs", Type = "integer", Min = 0, Max = 64, Value = 0 },
-        { Name = "Debug Print", Type = "enum", Choices = { "No", "Yes" }, Value = "No" }
+        { Name = "Additional Inputs", Type = "integer", Min = 0, Max = 64, Value = 0 }
     }
 end
 
-local function inputCount(props)
+function inputCount(props)
     return props["Additional Inputs"] and props["Additional Inputs"].Value or 0
 end
 
@@ -126,46 +124,45 @@ function GetControlLayout(props)
 end
 
 if Controls then
-    local debug = Properties["Debug Print"].Value == "Yes"
-    local lastCode, lastMessage
+    lastCode, lastMessage = nil, nil
 
-    local function arr(c)
+    function arr(c)
         if c == nil then return {} end
         local ok, first = pcall(function() return c[1] end)
         if ok and first ~= nil then return c end
         return { c }
     end
 
-    local inStatus, inLabel = arr(Controls.InputStatus), arr(Controls.InputLabel)
-    local inDisable, inSuppress = arr(Controls.InputDisable), arr(Controls.InputSuppress)
-    local inLatch, inReset = arr(Controls.InputLatch), arr(Controls.InputReset)
-    local latched, suppressedAt = {}, {}
+    inStatus, inLabel = arr(Controls.InputStatus), arr(Controls.InputLabel)
+    inDisable, inSuppress = arr(Controls.InputDisable), arr(Controls.InputSuppress)
+    inLatch, inReset = arr(Controls.InputLatch), arr(Controls.InputReset)
+    latched, suppressedAt = {}, {}
 
-    local function validCode(code)
+    function validCode(code)
         return type(code) == "number" and code == code and code >= 0 and code <= 5 and code % 1 == 0
     end
 
-    local function inputName(i)
+    function inputName(i)
         local text = inLabel[i].String
         return text ~= "" and text or ("Input " .. i)
     end
 
-    local function status(code, message)
+    function status(code, message)
         if code ~= lastCode or message ~= lastMessage then
-            if code ~= 0 or debug then print("Inventory Status Combiner: " .. message) end
+            print("Inventory Status Combiner: " .. message)
             lastCode, lastMessage = code, message
         end
         Controls.Status.Value = code
         Controls.Status.String = message
     end
 
-    local function leds(ok, compromised, fault)
+    function leds(ok, compromised, fault)
         Controls.OK.Boolean = ok
         Controls.Compromised.Boolean = compromised
         Controls.Fault.Boolean = fault
     end
 
-    local function update()
+    function update()
         local ok, inventory = pcall(Design.GetInventory)
         if not ok or type(inventory) ~= "table" then
             status(2, "Cannot read design inventory: " .. tostring(inventory))
